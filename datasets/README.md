@@ -14,3 +14,10 @@ datasets/
 ├── cases/           # Historical investigation case files
 └── evals/          # Benchmark target outputs for agent evaluation
 ```
+---
+## Quick Start
+To load a sample dataset into your local database:
+
+```bash
+python -m ingest.py --path datasets/transactions/sample.csv
+```
