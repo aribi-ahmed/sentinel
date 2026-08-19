@@ -10,7 +10,7 @@ class Settings(BaseSettings):
     # LLM Settings
     LLM_PROVIDER: str = "groq"
     GROQ_API_KEY: str = ""
-    MODEL_NAME: str = "llama-3.3-70b-versatile"
+    MODEL_NAME: str = "openai/gpt-oss-120b"
 
     # Database Settings
     DATABASE_URL: str = f"sqlite:///{DEFAULT_DB_PATH}"

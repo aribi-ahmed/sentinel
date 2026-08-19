@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Download, X, Database, File } from 'lucide-react';
-import { FileMetadata, fetchAssetFiles } from '../services/api';
-
+import type { FileMetadata } from '@/services/api';
+import { fetchAssetFiles } from '@/services/api';
 interface AssetsModalProps {
   isOpen: boolean;
   onClose: () => void;

@@ -1,5 +1,4 @@
 // src/services/api.ts
-
 const API_URL = (import.meta.env.VITE_API_URL || "/api").replace(/\/$/, "");
 
 export interface InvestigationData {
@@ -36,6 +35,10 @@ export interface FileMetadata {
   size: number;
   ext: string;
   path: string;
+  id: string;
+  filename: string;
+  uploaded_at: string;
+  status?: string;
 }
 
 export async function startInvestigation(subjectName: string, ticker: string): Promise<InvestigationData> {

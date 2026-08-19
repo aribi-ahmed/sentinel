@@ -7,12 +7,15 @@ from langchain_core.language_models.chat_models import BaseChatModel
 # Load environment variables from .env file
 load_dotenv()
 
-def get_llm(model_name: str = "llama-3.1-8b-instant", temperature: float = 0.1) -> BaseChatModel:
+def get_llm(model_name: str | None = None, temperature: float = 0.1) -> BaseChatModel:
     """
     Dual-provider LLM gateway.
     Switches between Groq (cloud) and Ollama (local) based on the LLM_PROVIDER env var.
+    Falls back to the LLM_MODEL env var (then a known-good Groq default) when no
+    explicit model_name is passed in.
     """
     provider = os.getenv("LLM_PROVIDER", "groq").lower()
+    model_name = model_name or os.getenv("LLM_MODEL", "openai/gpt-oss-120b")
 
     if provider == "ollama":
         try:

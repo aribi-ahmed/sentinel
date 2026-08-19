@@ -1,12 +1,16 @@
 # src/sentinel/api/main.py
-import uuid
 import os
+import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional, Any, Dict
 from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
-from fastapi.middleware.cors import CORSMiddleware
+
+from sentinel.config.settings import BASE_DIR
 from sentinel.database.db import get_db, init_db
 from sentinel.database.crud import (
     create_investigation,
@@ -16,17 +20,28 @@ from sentinel.database.crud import (
 )
 from sentinel.graph.workflow import app as graph_app
 
+# --- Reference asset directories (documentation & datasets browser) ---
+ASSET_DIRECTORIES = {
+    "doc": BASE_DIR / "docs",
+    "dataset": BASE_DIR / "datasets",
+}
+
 app = FastAPI(
     title="SENTINEL AI Gateway API",
     description="Enterprise Multi-Agent Compliance & Intelligence API Gateway",
     version="1.0.0"
 )
 
+# The UI's .env points VITE_API_URL straight at this server (not through Vite's
+# /api proxy), so browser requests are cross-origin and need CORS + preflight support.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000"], # Add your exact React frontend URL(s) here
+    allow_origins=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ],
     allow_credentials=True,
-    allow_methods=["*"], # This specifically allows the OPTIONS method
+    allow_methods=["*"],
     allow_headers=["*"],
 )
 
@@ -44,20 +59,12 @@ class StartInvestigationRequest(BaseModel):
 class ApprovalRequest(BaseModel):
     approved: bool
 
-class FileMetadata(BaseModel):
-    name: str
-    type: str  # 'dataset' or 'doc'
-    size: int  # in bytes
-    ext: str
-    path: str
-
 class InvestigationResponse(BaseModel):
     id: str
     subject_name: str
     ticker: Optional[str] = ""
     status: str
     risk_level: Optional[str] = "UNKNOWN"
-    confidence: Optional[float] = None  # Confidence score 0-1 (certainty of risk assessment)
     human_approved: Optional[bool] = None
     supervisor_reasoning: Optional[str] = ""
     final_report: Optional[str] = ""
@@ -104,7 +111,6 @@ def start_investigation_endpoint(req: StartInvestigationRequest, db: Session = D
         ticker=req.ticker,
         status=db_record.status.value if hasattr(db_record.status, "value") else str(db_record.status),
         risk_level=values.get("risk_level", "UNKNOWN"),
-        confidence=values.get("confidence"),
         human_approved=values.get("human_approved"),
         supervisor_reasoning=values.get("supervisor_reasoning", ""),
         final_report=values.get("final_report", ""),
@@ -152,7 +158,6 @@ def get_investigation_endpoint(investigation_id: str, db: Session = Depends(get_
         ticker=record.ticker,
         status=record.status.value if hasattr(record.status, "value") else str(record.status),
         risk_level=values.get("risk_level") or record.risk_level or "UNKNOWN",
-        confidence=values.get("confidence"),
         human_approved=values.get("human_approved") if values.get("human_approved") is not None else record.human_approved,
         supervisor_reasoning=values.get("supervisor_reasoning") or record.supervisor_reasoning or "",
         final_report=values.get("final_report") or record.final_report or "",
@@ -198,7 +203,6 @@ def approve_investigation_endpoint(investigation_id: str, req: ApprovalRequest, 
         ticker=record.ticker if record else "",
         status=record.status.value if hasattr(record.status, "value") else "completed",
         risk_level=risk_lvl,
-        confidence=final_values.get("confidence"),
         human_approved=req.approved,
         supervisor_reasoning=final_values.get("supervisor_reasoning", ""),
         final_report=final_values.get("final_report", ""),
@@ -211,53 +215,49 @@ def approve_investigation_endpoint(investigation_id: str, req: ApprovalRequest, 
     )
 
 
-@app.get("/assets/files", response_model=List[FileMetadata])
-def get_assets_endpoint():
-    """Fetches metadata for all datasets and documentation files."""
-    files = []
-    base_path = Path(__file__).parent.parent.parent.parent  # Get to project root
-    
-    # Scan datasets folder
-    datasets_path = base_path / "datasets"
-    if datasets_path.exists():
-        for file in datasets_path.iterdir():
-            if file.is_file():
-                files.append(FileMetadata(
-                    name=file.stem,
-                    type="dataset",
-                    size=file.stat().st_size,
-                    ext=file.suffix.lstrip('.'),
-                    path=f"/download/datasets/{file.name}"
-                ))
-    
-    # Scan docs folder
-    docs_path = base_path / "docs"
-    if docs_path.exists():
-        for file in docs_path.iterdir():
-            if file.is_file():
-                files.append(FileMetadata(
-                    name=file.stem,
-                    type="doc",
-                    size=file.stat().st_size,
-                    ext=file.suffix.lstrip('.'),
-                    path=f"/download/docs/{file.name}"
-                ))
-    
+# --- Reference asset library (documentation & datasets browser) ---
+
+def _list_asset_dir(directory: Path, category: str) -> List[Dict[str, Any]]:
+    if not directory.is_dir():
+        return []
+    items = []
+    for entry in sorted(directory.iterdir()):
+        if not entry.is_file():
+            continue
+        stat = entry.stat()
+        items.append({
+            "id": f"{category}:{entry.name}",
+            "name": entry.stem,
+            "filename": entry.name,
+            "type": category,
+            "ext": entry.suffix.lstrip(".").lower(),
+            "size": stat.st_size,
+            "path": f"/assets/{category}/{entry.name}",
+            "uploaded_at": datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc).isoformat(),
+        })
+    return items
+
+
+@app.get("/assets/files", response_model=List[Dict[str, Any]])
+def list_asset_files_endpoint():
+    """Lists downloadable reference documentation and dataset files."""
+    files: List[Dict[str, Any]] = []
+    for category, directory in ASSET_DIRECTORIES.items():
+        files.extend(_list_asset_dir(directory, category))
     return files
 
 
-@app.get("/download/{file_type}/{filename}")
-def download_file_endpoint(file_type: str, filename: str):
-    """Downloads a dataset or documentation file."""
-    from fastapi.responses import FileResponse
-    
-    if file_type not in ["datasets", "docs"]:
-        raise HTTPException(status_code=400, detail="Invalid file type")
-    
-    base_path = Path(__file__).parent.parent.parent.parent
-    file_path = base_path / file_type / filename
-    
-    if not file_path.exists() or not file_path.is_file():
+@app.get("/assets/{category}/{filename}")
+def download_asset_file_endpoint(category: str, filename: str):
+    """Streams a single reference file for download."""
+    directory = ASSET_DIRECTORIES.get(category)
+    if directory is None:
+        raise HTTPException(status_code=404, detail="Unknown asset category")
+
+    # os.path.basename strips any directory components to prevent path traversal.
+    safe_name = os.path.basename(filename)
+    file_path = directory / safe_name
+    if not file_path.is_file():
         raise HTTPException(status_code=404, detail="File not found")
-    
-    return FileResponse(file_path, filename=filename)
+
+    return FileResponse(file_path, filename=safe_name)

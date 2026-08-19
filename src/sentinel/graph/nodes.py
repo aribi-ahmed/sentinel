@@ -1,7 +1,7 @@
 # src/sentinel/graph/nodes.py
 from typing import Dict, Any
 from langchain_core.messages import HumanMessage
-import re
+
 from sentinel.graph.state import GraphState
 from sentinel.services.llm import get_llm
 from sentinel.tools.finance import fetch_company_financials
@@ -37,7 +37,7 @@ def news_analyst_node(state: GraphState) -> Dict[str, Any]:
     subject = state.get("subject_name") or state.get("ticker") or "Target Company"
     results = search_company_news.invoke({"query": subject})
     return {
-        "news_data": [{"query": subject, "results": results if isinstance(results, list) else str(results)}],
+        "news_data": [{"query": subject, "results": str(results)}],
         "logs": [f"News Analyst gathered OSINT search results for {subject}."]
     }
 
@@ -55,8 +55,8 @@ def compliance_analyst_node(state: GraphState) -> Dict[str, Any]:
 
 
 def supervisor_node(state: GraphState) -> Dict[str, Any]:
-    """AI Supervisor Node: Evaluates all gathered intelligence with confidence scoring."""
-    llm = get_llm(model_name="llama-3.1-8b-instant", temperature=0.1)
+    """AI Supervisor Node: Evaluates all gathered intelligence."""
+    llm = get_llm(temperature=0.1)
     
     subject = state.get("subject_name") or state.get("ticker") or "Target Company"
     research = state.get("research_data", [])
@@ -65,103 +65,42 @@ def supervisor_node(state: GraphState) -> Dict[str, Any]:
     compliance_rules = state.get("compliance_data", [])
 
     prompt = f"""
-You are the Chief Risk Officer for SENTINEL AI.
-Analyze the gathered intelligence for company: {subject}
+    You are the Chief Risk Officer for SENTINEL AI.
+    Analyze the gathered intelligence for company: {subject}
 
-RESEARCH BASELINE:
-{research}
+    RESEARCH BASELINE:
+    {research}
 
-FINANCIAL DATA:
-{financials}
+    FINANCIAL DATA:
+    {financials}
 
-NEWS & OSINT FINDINGS:
-{news}
+    NEWS & OSINT FINDINGS:
+    {news}
 
-INTERNAL COMPLIANCE RAG POLICIES:
-{compliance_rules}
+    INTERNAL COMPLIANCE RAG POLICIES:
+    {compliance_rules}
 
-TASK:
-1. Cross-reference financial metrics and OSINT news against internal compliance risk policies.
-2. Classify risk strictly as "LOW" or "ELEVATED". If financials and news are generally stable without major regulatory probes or auditor resignations, mark as "LOW".
-3. Provide a clear 2-3 sentence analytical justification referencing policy guidelines.
-4. CONFIDENCE: Evaluate your confidence in this assessment on a scale of 0-100. 
-   - High confidence (80-100): Clear evidence, multiple sources agree, strong indicators
-   - Medium confidence (50-79): Mixed evidence, some uncertainty, reasonable conclusion
-   - Low confidence (0-49): Conflicting data, insufficient evidence, speculative
+    TASK:
+    1. Cross-reference financial metrics and OSINT news against internal compliance risk policies.
+    2. Classify risk strictly as "LOW" or "ELEVATED".
+    3. Provide a clear 2-3 sentence analytical justification referencing policy guidelines.
 
-STRICT FORMAT REQUIREMENTS:
-Start your response on the very first line with EXACTLY one of these options:
-VERDICT: LOW
-or
-VERDICT: ELEVATED
-
-Then provide REASONING: <Your analytical reasoning> below it.
-Then provide CONFIDENCE: <0-100> (a single number representing your certainty percentage)
-"""
+    Strict Output Format:
+    RISK_LEVEL: <LOW or ELEVATED>
+    REASONING: <Your analytical reasoning>
+    """
 
     response = llm.invoke([HumanMessage(content=prompt)]).content.strip()
 
-    # Extract VERDICT
-    match = re.search(r"VERDICT:\s*(LOW|ELEVATED)", response, re.IGNORECASE)
-    if match:
-        risk = match.group(1).upper()
-    else:
-        first_line = response.split("\n")[0].upper()
-        risk = "ELEVATED" if "ELEVATED" in first_line else "LOW"
-
-    # Extract CONFIDENCE score (0-100)
-    confidence_match = re.search(r"CONFIDENCE:\s*(\d+)", response, re.IGNORECASE)
-    confidence_score = 0.0
-    if confidence_match:
-        confidence_value = int(confidence_match.group(1))
-        confidence_score = min(100, max(0, confidence_value)) / 100.0  # Normalize to 0-1
-    else:
-        # Fallback: calculate confidence based on evidence quality
-        confidence_score = calculate_confidence_from_evidence(research, financials, news, compliance_rules, risk)
+    first_line = response.split("\n")[0].upper()
+    risk = "ELEVATED" if "ELEVATED" in first_line or "RISK_LEVEL: ELEVATED" in response.upper() else "LOW"
 
     return {
         "risk_level": risk,
         "supervisor_reasoning": response,
-        "confidence": confidence_score,
-        "logs": [f"Supervisor AI evaluated risk as '{risk}' (confidence: {confidence_score:.1%}) based on multi-agent evidence."],
+        "logs": [f"Supervisor AI evaluated risk as '{risk}' based on multi-agent evidence."],
         "requires_human_review": (risk == "ELEVATED")
     }
-
-
-def calculate_confidence_from_evidence(research: list, financials: dict, news: list, compliance_rules: list, risk_level: str) -> float:
-    """Calculate confidence score based on evidence quality and availability."""
-    confidence = 0.5  # Start at 50%
-    
-    # +10% for each data source that contributed meaningful data
-    if research and len(research) > 0 and any(r for r in research if r):
-        confidence += 0.10
-    if financials and len(financials) > 0:
-        confidence += 0.10
-    if news and len(news) > 0 and any(n for n in news if n):
-        confidence += 0.10
-    if compliance_rules and len(compliance_rules) > 0 and any(c for c in compliance_rules if c):
-        confidence += 0.10
-    
-    # +5% for consistency if ELEVATED (multiple sources flagging issues) or LOW (all clear)
-    if risk_level == "ELEVATED":
-        # More confidence if multiple sources show risk signals
-        risk_indicators = 0
-        for source_data in [research, financials, news, compliance_rules]:
-            if source_data and str(source_data).lower().count(('risk' or 'concern' or 'issue' or 'problem')) > 0:
-                risk_indicators += 1
-        if risk_indicators >= 2:
-            confidence += 0.05
-    else:
-        # More confidence if all sources indicate stability
-        all_clear = True
-        for source_data in [research, financials, news, compliance_rules]:
-            if source_data and str(source_data).lower().count(('alert' or 'warning' or 'elevated' or 'concern')) > 0:
-                all_clear = False
-        if all_clear:
-            confidence += 0.05
-    
-    # Ensure confidence stays between 0 and 1
-    return min(1.0, max(0.0, confidence))
 
 
 def human_approval_node(state: GraphState) -> Dict[str, Any]:
