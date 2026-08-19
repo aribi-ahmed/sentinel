@@ -1,0 +1,155 @@
+Metadata-Version: 2.4
+Name: sentinel
+Version: 0.1.0
+Summary: Add your description here
+Requires-Python: >=3.14
+Description-Content-Type: text/markdown
+Requires-Dist: chromadb>=1.5.9
+Requires-Dist: ddgs>=9.14.4
+Requires-Dist: duckduckgo-search>=8.1.1
+Requires-Dist: fastapi>=0.140.7
+Requires-Dist: langchain-chroma>=1.1.0
+Requires-Dist: langchain-community>=0.4.2
+Requires-Dist: langchain-core>=1.5.1
+Requires-Dist: langchain-groq>=1.1.3
+Requires-Dist: langchain-huggingface>=1.2.2
+Requires-Dist: langgraph>=1.2.9
+Requires-Dist: psycopg2-binary>=2.9.12
+Requires-Dist: pydantic>=2.13.4
+Requires-Dist: pydantic-settings>=2.14.2
+Requires-Dist: pypdf>=6.14.2
+Requires-Dist: pytest>=9.1.1
+Requires-Dist: python-dotenv>=1.2.2
+Requires-Dist: sentence-transformers>=5.6.1
+Requires-Dist: sqlalchemy>=2.0.51
+Requires-Dist: streamlit>=1.60.0
+Requires-Dist: torchvision>=0.28.0
+Requires-Dist: uvicorn>=0.51.0
+Requires-Dist: yfinance>=1.5.2
+
+# 🛡️ SENTINEL: Multi-Agent Financial & Compliance Risk System - PHASE 1
+
+**SENTINEL** is an autonomous multi-agent AI framework built with **LangGraph**, **LangChain**, and **Groq (Llama 3.3 70B)**. It automates corporate risk analysis by dispatching specialized sub-agents to gather financial metrics and live web intelligence, evaluates risk levels, and enforces strict **Human-in-the-Loop governance** before issuing final approval reports.
+
+---
+
+## 📸 How It Works
+
+```text
+                  ┌────────────────────────┐
+                  │        START           │
+                  └───────────┬────────────┘
+                              │
+                              ▼
+                  ┌────────────────────────┐
+                  │ 📈 Financial Analyst   │  (Pulls Market Cap, Debt, Cashflow via yfinance)
+                  └───────────┬────────────┘
+                              │
+                              ▼
+                  ┌────────────────────────┐
+                  │ 🌐 OSINT / News Agent  │  (Scrapes Web & Lawsuit News via DuckDuckGo)
+                  └───────────┬────────────┘
+                              │
+                              ▼
+                  ┌────────────────────────┐
+                  │  👔 Supervisor Node    │  (Evaluates Risk & Sets LOW / ELEVATED)
+                  └───────────┬────────────┘
+                              │
+                              ▼
+                  ⏸️ 🛑 Human Checkpoint 🛑  <-- LangGraph pauses workflow here!
+                              │
+                 ┌────────────┴────────────┐
+                 │ Human Decision?         │
+                 └──────┬────────────┬─────┘
+          (APPROVED)    │            │    (REJECTED)
+                        ▼            ▼
+                  ┌──────────┐  ┌───────────┐
+                  │ Summary  │  │ Cancelled │
+                  └────┬─────┘  └─────┬─────┘
+                       │              │
+                       └──────┬───────┘
+                              ▼
+                           [ END ]
+```
+---
+# ✨ Key Features
+📈 Live Financial Intelligence: Fetches real-time stock quotes, valuation metrics, P/E ratios, and debt data without paid API keys (yfinance).
+
+🌐 Web OSINT Scraping: Scrapes recent controversies, lawsuits, and legal exposure snippets via DuckDuckGo (ddgs).
+
+👔 Automated Risk Assessment: Evaluates aggregated data and dynamically flags targets with an ELEVATED or LOW risk rating.
+
+🛑 Human-in-the-Loop Governance: Built-in breakpoint state persistence using LangGraph checkpointers (MemorySaver). The system pauses automatically before approval, awaiting human authorization to resume or terminate.
+
+⚡ Blazing Fast Execution: Powered by Groq's high-speed Llama 3.3 70B inference engine.
+
+# 📂 Project Structure
+```text
+sentinel/
+├── .env                       # Local API keys (ignored by git)
+├── pyproject.toml             # Project dependencies and setup
+├── test_tools.py              # Standalone tool integration test
+├── test_graph.py              # LangGraph workflow test script
+└── src/
+    └── sentinel/
+        ├── tools/
+        │   ├── finance.py     # Yahoo Finance extraction tool
+        │   └── osint.py       # DuckDuckGo search tool
+        └── graph/
+            ├── state.py       # Shared central GraphState schema & reducers
+            ├── nodes.py       # Agent worker nodes & summary generators
+            └── workflow.py    # StateGraph definition & checkpoint routing
+```
+
+# 🛠️ Prerequisites
+Python 3.10+
+
+uv Package Manager (Fast Python package manager)
+
+Groq API Key (Free from (GROQ)[console.groq.com])
+
+---
+
+# 🚀 Quickstart Guide
+## 1️⃣ Clone the Repository & Install Dependencies
+```bash
+git clone [https://github.com/aribi-ahmed/sentinel.git](https://github.com/aribi-ahmed/sentinel.git)
+cd sentinel
+```
+
+### Install all dependencies using uv
+```bash
+uv sync
+```
+## 2️⃣ Configure Environment Variables
+Create a .env file in the root directory:
+
+```
+GROQ_API_KEY=your_groq_api_key_here
+```
+## 3️⃣ Test Individual Tools
+Verify that Yahoo Finance, DuckDuckGo, and Groq LLM integration work on your machine:
+
+```bash
+uv run python test_tools.py
+```
+## 4️⃣ Run the Complete Agent Workflow
+Run the full state workflow with human-in-the-loop pausing and resuming:
+
+```bash
+uv run python test_graph.py
+```
+---
+# 📊 Sample Output
+```plaintext
+=========================================
+      SENTINEL APPROVED RISK REPORT      
+=========================================
+Target Company : Tesla Inc
+Risk Level     : ELEVATED
+Human Approved : True
+=========================================
+```
+---
+## 📜 License
+Distributed under the MIT License.

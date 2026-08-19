@@ -1,0 +1,20 @@
+# Virtual Environment
+.venv/
+venv/
+ENV/
+
+# Node dependencies & builds
+node_modules/
+dist/
+build/
+.vite/
+chroma_db/
+datasets/
+docs/
+# Environment variables & Databases
+.env
+*.db
+*.sqlite3
+*.csv
+*.txt
+*.pdf
