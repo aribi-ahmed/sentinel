@@ -9,4 +9,4 @@ This folder is intentionally **git-ignored** to prevent binary database files an
 The database is automatically generated or updated when you run the vector ingestion script:
 
 ```bash
-python -m sentinel.rag.ingest
+python ingest.py
